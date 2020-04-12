@@ -1,3 +1,3 @@
 # ErasmusNetwork
 
-install pandas, python-igraph
+install pandas, numpy, python-igraph, pycairo
