@@ -4,30 +4,20 @@ import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 #   load data
 g = pickle.load(open('networks\\exchange_network_countries.pkl', 'rb'))
+names = [vertex.attributes()['name'] for vertex in g.vs]
 
 # vertices / edges
 print("Number of vertices:", g.vcount())
 print("Number of edges:", g.ecount())
 
 # diameter
-sum_shortest_path = 0
-sum_shortest_path_non_infinite = 0
-names = index = [vertex.attributes()['name'] for vertex in g.vs]
-for source in names:
-    for target in names:
-        if source != target:
-            shortest_path = g.shortest_paths_dijkstra(source=source, target=target, mode='OUT', weights=None)[0][0]
-            if shortest_path != float('inf'):
-                sum_shortest_path_non_infinite += shortest_path
-            sum_shortest_path += shortest_path
+print("Graph diameter (Average shortest path length):", g.average_path_length(directed=True))
 
-print("Graph diameter (Average path length):", sum_shortest_path/(g.ecount()))
-print("Graph diameter (Average path length non infinite):", sum_shortest_path_non_infinite/(g.ecount()))
-
-# strongly connected ?
+# strongly connected
 components = g.clusters()
 print("Connected components:", components)
 #print("Density of the graph:", 2*g.ecount()/(g.vcount()*(g.vcount()-1)))
@@ -53,46 +43,72 @@ print("Maximum degree in:", max(degrees_in))
 print("Vertex with the maximum degree in:", [names[index] for index in np.where(degrees_in == max(degrees_in))[0]])
 
 # considering weights
+degrees_out_weight = np.zeros(g.vcount())
+degrees_in_weight = np.zeros(g.vcount())
+for edge in g.es():
+    source = edge.source
+    target = edge.target
+    weight = edge.attributes()['weight']
+    degrees_out_weight[source] += weight
+    degrees_in_weight[target] += weight
 
-# normalized degree centrality
+print("Average degree out (weighted):",  mean(degrees_out_weight))
+print("Maximum degree out (weighted):", int(max(degrees_out_weight)))
+print("Vertex with the maximum degree out (weighted):", [names[index] for index in np.where(degrees_out_weight == max(degrees_out_weight))[0]])
+print("Average degree in (weighted):",  mean(degrees_in_weight))
+print("Maximum degree in (weighted):", int(max(degrees_in_weight)))
+print("Vertex with the maximum degree in (weighted):", [names[index] for index in np.where(degrees_in_weight == max(degrees_in_weight))[0]])
 
-# normalized closeness centrality
+# normalized closeness centrality : not defined for disconnected graphs
+#closeness_centrality = pd.DataFrame(g.closeness(mode='OUT', cutoff=2, weights=None, normalized=True),
+#                                    index=names, columns=['Closeness'])
 
-# normalized betweenness centrality
+# betweenness centrality
+betweeness_centrality = pd.DataFrame(g.betweenness(directed=True, cutoff=2, weights=None), index=names,
+                                     columns=['Betweenness'])
 
 # eigenvector centrality
+eigenvector_centrality = pd.DataFrame(g.eigenvector_centrality(directed=True, weights=None, scale=True,
+                                                               return_eigenvalue=False), index=names,
+                                      columns=['EV centrality'])
 
-# look at harmonic centrality
+# authority score
+authority_score = pd.DataFrame(g.authority_score(weights=None, scale=True, return_eigenvalue=False), index=names,
+                                      columns=['EV centrality'])
 
-# look at Katz centrality
+# minimal separators
+minimal_separators = g.all_minimal_st_separators()
+for i in range(len(minimal_separators)):
+    for j in range(len(minimal_separators[i])):
+        minimal_separators[i][j] = names[minimal_separators[i][j]]
 
-# clustering coefficient
+# clique number
+print("Clique number:", g.clique_number())
 
 # degree distribution
 
 plt.rcParams.update({'font.size': 25})
 
-x = [x for x in range(max(degrees_out)+1)]
-degree_counts = [0 for _ in x]
+x_out = [i for i in range(max(degrees_out)+1)]
+degree_counts_out = [0 for _ in x_out]
 
 for i in range(max(degrees_out)+1):
-    degree_counts[i] += len(np.where(degrees_out == i)[0])
+    degree_counts_out[i] += len(np.where(degrees_out == i)[0])
 
-print("Degree having the maximum number of vertices out:", degree_counts.index(max(degree_counts)))
-print("Number of vertices having the most abundant degree out:", max(degree_counts))
+print("Degree having the maximum number of vertices out:", degree_counts_out.index(max(degree_counts_out)))
+print("Number of vertices having the most abundant degree out:", max(degree_counts_out))
 
 plt.figure(figsize=(20, 10))
-plt.plot(x, degree_counts, linewidth=3.0)
+plt.plot(x_out, degree_counts_out, linewidth=3.0)
 plt.ylabel('Number of vertices having the given degree out')
 plt.xlabel('Degree out')
 plt.title('Degree Distribution (out) of Vertices in the Graph')
 plt.grid(True)
-plt.savefig('degree_distribution.png', bbox_inches='tight')
 plt.gca().invert_xaxis()
 plt.show()
 plt.draw()
 
-x_in = [x for x in range(max(degrees_in)+1)]
+x_in = [i for i in range(max(degrees_in)+1)]
 degree_counts_in = [0 for _ in x_in]
 
 for i in range(len(degree_counts_in)):
@@ -108,11 +124,50 @@ plt.ylabel('Number of vertices having the given degree in')
 plt.xlabel('Degree in')
 plt.title('Degree Distribution (in) of Vertices in the Graph')
 plt.grid(True)
-plt.savefig('degree_distribution.png', bbox_inches='tight')
 plt.gca().invert_xaxis()
 plt.show()
 plt.draw()
 
+# degree distribution weighted: consider binning for countries
+
+x_out_weight = [i for i in range(int(max(degrees_out_weight)+1))]
+degree_counts_out_weight = [0 for _ in x_out_weight]
+
+for i in range(int(max(degrees_out_weight)+1)):
+    degree_counts_out_weight[i] += len(np.where(degrees_out_weight == i)[0])
+
+print("Degree having the maximum number of vertices out (weighted):", degree_counts_out_weight.index(max(degree_counts_out_weight)))
+print("Number of vertices having the most abundant degree out (weighted):", int(max(degree_counts_out_weight)))
+
+plt.figure(figsize=(20, 10))
+plt.plot(x_out_weight, degree_counts_out_weight, linewidth=3.0)
+plt.ylabel('Number of vertices having the given degree out')
+plt.xlabel('Weighted degree out')
+plt.title('Weighted Degree Distribution (out) of Vertices in the Graph')
+plt.grid(True)
+plt.gca().invert_xaxis()
+plt.show()
+plt.draw()
+
+x_in_weight = [i for i in range(int(max(degrees_in_weight)+1))]
+degree_counts_in_weight = [0 for _ in x_in_weight]
+
+for i in range(len(degree_counts_in_weight)):
+    degree_counts_in_weight[i] += len(np.where(degrees_in_weight == i)[0])
+
+print("Degree having the maximum number of vertices in (weighted):", degree_counts_in_weight.index(max(degree_counts_in_weight)))
+print("Number of vertices having the most abundant degree in (weighted):", int(max(degree_counts_in_weight)))
+
+
+plt.figure(figsize=(20, 10))
+plt.plot(x_in_weight, degree_counts_in_weight, linewidth=3.0)
+plt.ylabel('Number of vertices having the given degree in')
+plt.xlabel('Weighted Degree in')
+plt.title('Weighted Degree Distribution (in) of Vertices in the Graph')
+plt.grid(True)
+plt.gca().invert_xaxis()
+plt.show()
+plt.draw()
 
 # number of triangles
 
